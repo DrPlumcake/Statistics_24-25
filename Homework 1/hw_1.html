@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Penetration Simulation</title>
+    <style>
+        body{
+            background-color: #323232; /* Dark background */
+            color: #fff; /* White text */
+        }
+        #canvas {
+            border: 1px solid #fff;
+            float: left;  /* Align canvas to the left */
+        }
+        .histogram {
+            float: left;
+            margin-left: 20px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; /* Align histogram bars to the left */
+        }
+        .bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .bar-text {
+            margin-right: 10px;
+            color: #fff;
+        }
+        .bar-fill {
+            background-color: #f4a742;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
+        .clearfix {
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <h3>Server Penetration Simulation</h3>
+
+    <div>
+        <label for="n-servers">Number of Servers (n): </label>
+        <input type="number" id="n-servers" value="10" min="1" max="50">
+        <label for="m-attackers">Number of Attackers (m): </label>
+        <input type="number" id="m-attackers" value="5" min="1" max="50">
+        <label for="p-penetration">Penetration Probability (p): </label>
+        <input type="number" id="p-penetration" step="0.1" value="0.3" min="0" max="1">
+        <button onclick="runSimulation()">Run Simulation</button>
+    </div>
+
+    <canvas id="canvas" width="600" height="400"></canvas>
+
+    <div id="histogram" class="histogram"></div>
+
+    <div class="clearfix"></div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Draw Grid Helper
+        function drawGrid(n_servers, m_attackers) {
+            const serverWidth = canvas.width / n_servers;
+            const attackerHeight = canvas.height / m_attackers;
+
+            // Vertical grid lines (servers)
+            ctx.strokeStyle = '#cccccc';
+            for (let i = 1; i <= n_servers; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * serverWidth, 0);
+                ctx.lineTo(i * serverWidth, canvas.height);
+                ctx.stroke();
+            }
+
+            // Horizontal grid lines (attackers)
+            for (let i = 1; i <= m_attackers; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * attackerHeight);
+                ctx.lineTo(canvas.width, i * attackerHeight);
+                ctx.stroke();
+            }
+        }
+
+        // Draw Line Helper
+        function drawLine(x1, y1, x2, y2, color = 'black') {
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        // Generate random color for each line
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        // Simulation Function
+        function runSimulation() {
+            const n_servers = parseInt(document.getElementById('n-servers').value);
+            const m_attackers = parseInt(document.getElementById('m-attackers').value);
+            const p_penetration = parseFloat(document.getElementById('p-penetration').value);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawGrid(n_servers, m_attackers); // Draw grid
+
+            const serverWidth = canvas.width / n_servers;
+            const attackerHeight = canvas.height / m_attackers;
+            let penetrationResults = Array.from({ length: m_attackers }, () => []);
+
+            const colors = [];
+
+            // Simulate each attacker's penetration results
+            for (let i = 0; i < m_attackers; i++) {
+                let x = 0;
+                let y = canvas.height;  // Start exactly at the bottom-left corner
+
+                const lineColor = getRandomColor(); // Unique color for each line
+                colors.push(lineColor);
+
+                for (let j = 0; j < n_servers; j++) {
+                    const penetrated = Math.random() < p_penetration;
+                    const nextX = (j + 1) * serverWidth;
+                    let nextY = y;
+
+                    if (penetrated) {
+                        nextY = y - attackerHeight;  // Jump when penetration happens
+                        penetrationResults[i].push(1);
+                    } else {
+                        penetrationResults[i].push(0);
+                    }
+
+                    drawLine(x, y, nextX, nextY, lineColor);
+                    x = nextX;
+                    y = nextY;
+                }
+            }
+
+            // Create histogram of final penetration levels
+            const finalPenetrations = penetrationResults.map(res => res.reduce((a, b) => a + b, 0));
+            createHistogram(finalPenetrations, colors);
+        }
+
+        // Create Histogram of Penetration Levels
+        function createHistogram(data, colors) {
+            const histogramDiv = document.getElementById('histogram');
+            histogramDiv.innerHTML = '';
+
+            data.forEach((level, id) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+
+                // Add attacker's ID
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Attacker ${id}:`;
+
+                // Add attacker's progress bar
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.style.width = `${level * 30}px`;  // Adjust width based on penetration
+                barFill.style.backgroundColor = colors[id];
+                barFill.innerText = level;
+
+                bar.appendChild(barText);
+                bar.appendChild(barFill);
+                histogramDiv.appendChild(bar);
+            });
+        }
+
+        runSimulation(); // Run initial simulation on page load
+    </script>
+</body>
+</html>
