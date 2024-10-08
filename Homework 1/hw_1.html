@@ -61,9 +61,23 @@
 
     <div class="clearfix"></div>
 
+    <p id="avgResult"></p>
+
+    <p id="varianceResult"></p>
+
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        let runningAvg = 0;   // Store the running average
+        let runningVariance = 0;  // Store the running variance
+
+        // Welford's Method for calculating average and variance
+        function calculateAverage(currentAvg, currentVar, count, newValue) {
+            const delta = newValue - currentAvg;
+            const newAvg = currentAvg + delta / count;
+            const newVar = currentVar + delta * (newValue - newAvg);
+            return { avg: newAvg, variance: newVar };
+        }
 
         // Draw Grid Helper
         function drawGrid(n_servers, m_attackers) {
@@ -122,6 +136,9 @@
 
             const colors = [];
 
+            runningAvg = 0;   // Reset running average
+            runningVariance = 0;  // Reset running variance
+
             // Simulate each attacker's penetration results
             for (let i = 0; i < m_attackers; i++) {
                 let x = 0;
@@ -130,6 +147,8 @@
                 const lineColor = getRandomColor(); // Unique color for each line
                 colors.push(lineColor);
 
+                let penetrations = 0;
+
                 for (let j = 0; j < n_servers; j++) {
                     const penetrated = Math.random() < p_penetration;
                     const nextX = (j + 1) * serverWidth;
@@ -137,20 +156,31 @@
 
                     if (penetrated) {
                         nextY = y - attackerHeight;  // Jump when penetration happens
-                        penetrationResults[i].push(1);
-                    } else {
-                        penetrationResults[i].push(0);
+                        penetrations += 1;
                     }
 
                     drawLine(x, y, nextX, nextY, lineColor);
                     x = nextX;
                     y = nextY;
                 }
+
+                penetrationResults[i] = penetrations;
+
+                // Update running average and variance after each attacker's result
+                const result = calculateAverage(runningAvg, runningVariance, i + 1, penetrations);
+                runningAvg = result.avg;
+                runningVariance = result.variance;
             }
 
-            // Create histogram of final penetration levels
-            const finalPenetrations = penetrationResults.map(res => res.reduce((a, b) => a + b, 0));
-            createHistogram(finalPenetrations, colors);
+            // Final variance needs to be normalized by the number of attackers
+            runningVariance = runningVariance / m_attackers;
+
+            // Update the histogram
+            createHistogram(penetrationResults, colors);
+
+            // Display the final average and variance
+            document.getElementById('avgResult').textContent = `Average compromised systems: ${runningAvg.toFixed(2)}`;
+            document.getElementById('varianceResult').textContent = `Variance: ${runningVariance.toFixed(2)}`;
         }
 
         // Create Histogram of Penetration Levels
