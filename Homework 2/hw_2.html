@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDE Simulation with Jumps and Relative Frequency</title>
+    <style>
+        body {
+            background-color: #212121; /* Dark background */
+            color: #fff; /* White text */
+        }
+        #canvas {
+            border: 1px solid #fff;
+            float: left;  /* Align canvas to the left */
+        }
+        .histogram, .relative-freq {
+            float: left;
+            margin-left: 20px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; /* Align bars to the left */
+        }
+        .bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .bar-text {
+            margin-right: 10px;
+            color: #fff;
+        }
+        .bar-fill {
+            background-color: #f4a742;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
+        .clearfix {
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <h3>Euler-Maruyama SDE Simulation with Jumps</h3>
+
+    <div>
+        <label for="n-servers">Number of Servers (n): </label>
+        <input type="number" id="n-servers" value="10" min="1" max="50">
+        <label for="m-attackers">Number of Attackers (m): </label>
+        <input type="number" id="m-attackers" value="5" min="1" max="50">
+        <label for="p-penetration">Penetration Probability (p): </label>
+        <input type="number" id="p-penetration" step="0.1" value="0.3" min="0" max="1">
+        <label for="intermediate-step">Intermediate Step: </label>
+        <input type="number" id="intermediate-step" value="5" min="1">
+        <button onclick="newSimulation()">New Simulation</button>
+        <button onclick="nextStep()">Next Step</button>
+    </div>
+
+    <canvas id="canvas" width="600" height="400"></canvas>
+
+    <div id="histogram" class="histogram"></div>
+    <div id="relative-freq" class="relative-freq"></div>
+    
+    <div class="clearfix"></div>
+
+    <p id="avgResult"></p>
+    <p id="varianceResult"></p>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let n_servers, m_attackers, p_penetration, intermediateStep;
+        let currentStep = 0;
+        let attackerResults = [];
+        let relativeFreqTrajectory = [];
+        let colors = [];
+
+        let runningAvg = 0; // Running average
+        let runningVariance = 0; // Running variance
+
+        function newSimulation() {
+            // Reset all parameters
+            n_servers = parseInt(document.getElementById('n-servers').value);
+            m_attackers = parseInt(document.getElementById('m-attackers').value);
+            p_penetration = parseFloat(document.getElementById('p-penetration').value);
+            intermediateStep = parseInt(document.getElementById('intermediate-step').value);
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawGrid(n_servers, m_attackers); // Draw grid
+
+            currentStep = 0;
+            attackerResults = Array(m_attackers).fill(0);
+            relativeFreqTrajectory = Array(n_servers + 1).fill(0);
+            colors = [];
+
+            runningAvg = 0; 
+            runningVariance = 0;
+
+            // Generate unique color for each attacker
+            for (let i = 0; i < m_attackers; i++) {
+                colors.push(getRandomColor());
+            }
+
+            updateDisplay();
+        }
+
+        function nextStep() {
+            if (currentStep >= n_servers) return; // Stop when reaching the number of servers
+
+            const serverWidth = canvas.width / n_servers;
+            const attackerHeight = canvas.height / m_attackers;
+
+            for (let i = 0; i < m_attackers; i++) {
+                let x = currentStep * serverWidth;
+                let y = canvas.height - (attackerResults[i] * attackerHeight);
+
+                let nextX = (currentStep + 1) * serverWidth;
+                let nextY = y;
+
+                // Apply random walk: +1 on penetration, -1 otherwise
+                if (Math.random() < p_penetration) {
+                    attackerResults[i] += 1;
+                    nextY -= attackerHeight;
+                } else {
+                    attackerResults[i] = Math.max(attackerResults[i] - 1, 0); // No negative values allowed
+                    nextY += attackerHeight;
+                }
+
+                drawLine(x, y, nextX, nextY, colors[i]);
+            }
+
+            currentStep++;
+            updateDisplay();
+        }
+
+        function drawGrid(n_servers, m_attackers) {
+            const serverWidth = canvas.width / n_servers;
+            const attackerHeight = canvas.height / m_attackers;
+
+            ctx.strokeStyle = '#cccccc';
+            for (let i = 1; i <= n_servers; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * serverWidth, 0);
+                ctx.lineTo(i * serverWidth, canvas.height);
+                ctx.stroke();
+            }
+
+            for (let i = 1; i <= m_attackers; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * attackerHeight);
+                ctx.lineTo(canvas.width, i * attackerHeight);
+                ctx.stroke();
+            }
+        }
+
+        function drawLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        function updateDisplay() {
+            // Update histogram
+            createHistogram(attackerResults);
+            
+            // Update relative frequency trajectory
+            updateRelativeFreq(attackerResults);
+
+            // Update mean and variance
+            const { avg, variance } = calculateMeanVariance(attackerResults);
+            document.getElementById('avgResult').textContent = `Average: ${avg.toFixed(2)}`;
+            document.getElementById('varianceResult').textContent = `Variance: ${variance.toFixed(2)}`;
+
+            // Show intermediate results
+            if (currentStep == intermediateStep) {
+                alert("Intermediate Step Reached!");
+            }
+        }
+
+        function createHistogram(data) {
+            const histogramDiv = document.getElementById('histogram');
+            histogramDiv.innerHTML = ''; // Clear previous content
+
+            data.forEach((level, id) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Attacker ${id}:`;
+
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.style.width = `${level * 30}px`;
+                barFill.style.backgroundColor = colors[id];
+                barFill.innerText = level;
+
+                bar.appendChild(barText);
+                bar.appendChild(barFill);
+                histogramDiv.appendChild(bar);
+            });
+        }
+
+        function updateRelativeFreq(data) {
+            const freqDiv = document.getElementById('relative-freq');
+            freqDiv.innerHTML = ''; // Clear previous content
+
+            // Calculate the relative frequencies
+            const freqCounts = Array(n_servers + 1).fill(0);
+            data.forEach(level => {
+                freqCounts[level]++;
+            });
+
+            relativeFreqTrajectory = freqCounts.map(count => (count / m_attackers).toFixed(2));
+
+            relativeFreqTrajectory.forEach((freq, index) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Level ${index}:`;
+
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.style.width = `${freq * 300}px`; // Adjust width for relative freq
+                barFill.style.backgroundColor = '#42aaf4';
+                barFill.innerText = freq;
+
+                bar.appendChild(barText);
+                bar.appendChild(barFill);
+                freqDiv.appendChild(bar);
+            });
+        }
+
+        function calculateMeanVariance(data) {
+            const n = data.length;
+            const mean = data.reduce((sum, val) => sum + val, 0) / n;
+            const variance = data.reduce((sum, val) => sum + (val - mean) ** 2, 0) / n;
+            return { avg: mean, variance: variance };
+        }
+
+    </script>
+</body>
+</html>
