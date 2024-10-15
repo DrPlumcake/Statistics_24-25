@@ -53,12 +53,12 @@
         <label for="p-penetration">Penetration Probability (p): </label>
         <input type="number" id="p-penetration" step="0.1" value="0.3" min="0" max="1">
         <label for="intermediate-step">Intermediate Step: </label>
-        <input type="number" id="intermediate-step" value="5" min="1">
+        <input type="number" id="intermediate-step" value="15" min="1">
         <button onclick="newSimulation()">New Simulation</button>
         <button onclick="nextStep()">Next Step</button>
     </div>
 
-    <canvas id="canvas" width="600" height="400"></canvas>
+    <canvas id="canvas" width="600" height="800"></canvas>
 
     <div id="histogram" class="histogram"></div>
     <div id="relative-freq" class="relative-freq"></div>
@@ -75,6 +75,7 @@
         let n_servers, m_attackers, p_penetration, intermediateStep;
         let currentStep = 0;
         let attackerResults = [];
+        let attackerPositions = []; // Tracks the y-position of each attacker
         let relativeFreqTrajectory = [];
         let colors = [];
 
@@ -89,19 +90,19 @@
             intermediateStep = parseInt(document.getElementById('intermediate-step').value);
             
             ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-            drawGrid(n_servers, m_attackers); // Draw grid
+            drawGrid(n_servers, m_attackers); // Draw grid with coordinates
 
             currentStep = 0;
-            attackerResults = Array(m_attackers).fill(0);
+            attackerResults = Array(m_attackers).fill(0); // Keeps track of how many steps each attacker has made
+            attackerPositions = Array(m_attackers).fill(canvas.height / 2); // Start all attackers from the middle-left of the canvas
             relativeFreqTrajectory = Array(n_servers + 1).fill(0);
             colors = [];
 
             runningAvg = 0; 
             runningVariance = 0;
 
-            // Generate unique color for each attacker
             for (let i = 0; i < m_attackers; i++) {
-                colors.push(getRandomColor());
+                colors.push(getRandomColor()); // Generate unique color for each attacker
             }
 
             updateDisplay();
@@ -111,11 +112,11 @@
             if (currentStep >= n_servers) return; // Stop when reaching the number of servers
 
             const serverWidth = canvas.width / n_servers;
-            const attackerHeight = canvas.height / m_attackers;
+            const attackerHeight = canvas.height / (2 * m_attackers); // Half canvas for positive and negative
 
             for (let i = 0; i < m_attackers; i++) {
                 let x = currentStep * serverWidth;
-                let y = canvas.height - (attackerResults[i] * attackerHeight);
+                let y = attackerPositions[i];  // Start from the attacker's last position
 
                 let nextX = (currentStep + 1) * serverWidth;
                 let nextY = y;
@@ -123,13 +124,17 @@
                 // Apply random walk: +1 on penetration, -1 otherwise
                 if (Math.random() < p_penetration) {
                     attackerResults[i] += 1;
-                    nextY -= attackerHeight;
+                    nextY -= attackerHeight; // Move upwards (penetration)
                 } else {
-                    attackerResults[i] = Math.max(attackerResults[i] - 1, 0); // No negative values allowed
-                    nextY += attackerHeight;
+                    attackerResults[i] = Math.max(attackerResults[i] - 1, -m_attackers); // No value below -m_attackers
+                    nextY += attackerHeight; // Move downwards (failed attack)
                 }
 
+                // Draw the attacker's movement
                 drawLine(x, y, nextX, nextY, colors[i]);
+
+                // Update the last position of this attacker
+                attackerPositions[i] = nextY;
             }
 
             currentStep++;
@@ -138,21 +143,30 @@
 
         function drawGrid(n_servers, m_attackers) {
             const serverWidth = canvas.width / n_servers;
-            const attackerHeight = canvas.height / m_attackers;
+            const attackerHeight = canvas.height / (2 * m_attackers); // Adjust for positive and negative grid
 
             ctx.strokeStyle = '#cccccc';
-            for (let i = 1; i <= n_servers; i++) {
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#cccccc';
+
+            // Draw X axis with numbers
+            for (let i = 0; i <= n_servers; i++) {
+                const xPos = i * serverWidth;
                 ctx.beginPath();
-                ctx.moveTo(i * serverWidth, 0);
-                ctx.lineTo(i * serverWidth, canvas.height);
+                ctx.moveTo(xPos, 0);
+                ctx.lineTo(xPos, canvas.height);
                 ctx.stroke();
+                ctx.fillText(i, xPos + 5, canvas.height - 10); // X-axis labels
             }
 
-            for (let i = 1; i <= m_attackers; i++) {
+            // Draw Y axis with numbers (positive and negative from the middle)
+            for (let i = -m_attackers; i <= m_attackers; i++) {
+                const yPos = canvas.height / 2 - i * attackerHeight; // Middle as zero point
                 ctx.beginPath();
-                ctx.moveTo(0, i * attackerHeight);
-                ctx.lineTo(canvas.width, i * attackerHeight);
+                ctx.moveTo(0, yPos);
+                ctx.lineTo(canvas.width, yPos);
                 ctx.stroke();
+                ctx.fillText(i, 5, yPos - 5); // Y-axis labels
             }
         }
 
@@ -192,39 +206,60 @@
         }
 
         function createHistogram(data) {
-            const histogramDiv = document.getElementById('histogram');
-            histogramDiv.innerHTML = ''; // Clear previous content
+    const histogramDiv = document.getElementById('histogram');
+    histogramDiv.innerHTML = ''; // Clear previous content
 
-            data.forEach((level, id) => {
-                const bar = document.createElement('div');
-                bar.className = 'bar';
+    data.forEach((level, id) => {
+        // First, create bar for successful penetrations
+        const barSuccess = document.createElement('div');
+        barSuccess.className = 'bar';
 
-                const barText = document.createElement('div');
-                barText.className = 'bar-text';
-                barText.innerText = `Attacker ${id}:`;
+        const barTextSuccess = document.createElement('div');
+        barTextSuccess.className = 'bar-text';
+        barTextSuccess.innerText = `Attacker ${id} Success:`;
 
-                const barFill = document.createElement('div');
-                barFill.className = 'bar-fill';
-                barFill.style.width = `${level * 30}px`;
-                barFill.style.backgroundColor = colors[id];
-                barFill.innerText = level;
+        const barFillSuccess = document.createElement('div');
+        barFillSuccess.className = 'bar-fill';
+        barFillSuccess.style.width = `${level * 30}px`;
+        barFillSuccess.style.backgroundColor = colors[id];
+        barFillSuccess.innerText = level;
 
-                bar.appendChild(barText);
-                bar.appendChild(barFill);
-                histogramDiv.appendChild(bar);
-            });
-        }
+        barSuccess.appendChild(barTextSuccess);
+        barSuccess.appendChild(barFillSuccess);
+        histogramDiv.appendChild(barSuccess);
+
+        // Now, create bar for failed attempts
+        const barFail = document.createElement('div');
+        barFail.className = 'bar';
+
+        const barTextFail = document.createElement('div');
+        barTextFail.className = 'bar-text';
+        barTextFail.innerText = `Attacker ${id} Fail:`;
+
+        const barFillFail = document.createElement('div');
+        barFillFail.className = 'bar-fail';
+        barFillFail.style.width = `${(currentStep - level) * 30}px`; // Failed attempts
+        barFillFail.innerText = currentStep - level;
+
+        barFail.appendChild(barTextFail);
+        barFail.appendChild(barFillFail);
+        histogramDiv.appendChild(barFail);
+    });
+}
 
         function updateRelativeFreq(data) {
             const freqDiv = document.getElementById('relative-freq');
             freqDiv.innerHTML = ''; // Clear previous content
 
-            // Calculate the relative frequencies
+            // Calculate the relative frequencies (including negative levels)
             const freqCounts = Array(n_servers + 1).fill(0);
+            const minLevel = -m_attackers;
+
             data.forEach(level => {
-                freqCounts[level]++;
+                freqCounts[level - minLevel]++;
             });
 
+            const totalLevels = 2 * m_attackers;
             relativeFreqTrajectory = freqCounts.map(count => (count / m_attackers).toFixed(2));
 
             relativeFreqTrajectory.forEach((freq, index) => {
@@ -233,7 +268,7 @@
 
                 const barText = document.createElement('div');
                 barText.className = 'bar-text';
-                barText.innerText = `Level ${index}:`;
+                barText.innerText = `Level ${index + minLevel}:`;
 
                 const barFill = document.createElement('div');
                 barFill.className = 'bar-fill';
