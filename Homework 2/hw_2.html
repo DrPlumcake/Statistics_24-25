@@ -206,46 +206,37 @@
         }
 
         function createHistogram(data) {
-    const histogramDiv = document.getElementById('histogram');
-    histogramDiv.innerHTML = ''; // Clear previous content
+            const histogramDiv = document.getElementById('histogram');
+            histogramDiv.innerHTML = ''; // Clear previous content
 
-    data.forEach((level, id) => {
-        // First, create bar for successful penetrations
-        const barSuccess = document.createElement('div');
-        barSuccess.className = 'bar';
+            data.forEach((level, id) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
 
-        const barTextSuccess = document.createElement('div');
-        barTextSuccess.className = 'bar-text';
-        barTextSuccess.innerText = `Attacker ${id} Success:`;
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Attacker ${id}:`;
 
-        const barFillSuccess = document.createElement('div');
-        barFillSuccess.className = 'bar-fill';
-        barFillSuccess.style.width = `${level * 30}px`;
-        barFillSuccess.style.backgroundColor = colors[id];
-        barFillSuccess.innerText = level;
+                // Positive (successful penetrations) bar
+                const barFillPos = document.createElement('div');
+                barFillPos.className = 'bar-fill';
+                barFillPos.style.width = `${Math.max(0, level) * 30}px`;
+                barFillPos.style.backgroundColor = colors[id];
+                barFillPos.innerText = level >= 0 ? level : 0;
 
-        barSuccess.appendChild(barTextSuccess);
-        barSuccess.appendChild(barFillSuccess);
-        histogramDiv.appendChild(barSuccess);
+                // Negative (failed attacks) bar
+                const barFillNeg = document.createElement('div');
+                barFillNeg.className = 'bar-fill';
+                barFillNeg.style.width = `${Math.abs(Math.min(0, level)) * 30}px`;
+                barFillNeg.style.backgroundColor = '#ff4d4d'; // Red color for failures
+                barFillNeg.innerText = level < 0 ? Math.abs(level) : 0;
 
-        // Now, create bar for failed attempts
-        const barFail = document.createElement('div');
-        barFail.className = 'bar';
-
-        const barTextFail = document.createElement('div');
-        barTextFail.className = 'bar-text';
-        barTextFail.innerText = `Attacker ${id} Fail:`;
-
-        const barFillFail = document.createElement('div');
-        barFillFail.className = 'bar-fail';
-        barFillFail.style.width = `${(currentStep - level) * 30}px`; // Failed attempts
-        barFillFail.innerText = currentStep - level;
-
-        barFail.appendChild(barTextFail);
-        barFail.appendChild(barFillFail);
-        histogramDiv.appendChild(barFail);
-    });
-}
+                bar.appendChild(barText);
+                bar.appendChild(barFillPos);
+                bar.appendChild(barFillNeg);
+                histogramDiv.appendChild(bar);
+            });
+        }
 
         function updateRelativeFreq(data) {
             const freqDiv = document.getElementById('relative-freq');
