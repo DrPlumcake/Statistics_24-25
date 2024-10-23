@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Time SDE Simulation</title>
+    <style>
+        body {
+            background-color: #212121;
+            color: #fff;
+        }
+        .graph-container {
+            width: 100%;       /* Full width of the page */
+            min-height:auto;     /* You can adjust this height if needed */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-grow:1;
+        }        
+        #canvas {
+            width: 100%;       /* Make the canvas take all the available width */
+            height: 100%;      /* Make the canvas take all the available height */
+            border: 1px solid #fff;
+            float: left;
+        }
+        .histogram, .relative-freq {
+            float: left;
+            margin-left: 20px;
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .controls {
+            margin-top: 20px;   /* Add space between graph and controls */
+            text-align: center;
+        }
+        .controls label, .controls input {
+            margin: 10px;
+            font-size: 16px;    /* Adjust font size for better visibility */
+        }
+        .bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .bar-text {
+            margin-right: 10px;
+            color: #fff;
+        }
+        .bar-fill {
+            background-color: #f4a742;
+            height: 20px;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+        }
+        .clearfix {
+            clear: both;
+        }
+    </style>
+</head>
+<body>
+    <h3>Continuous Time SDE Simulation with Poisson Jumps</h3>
+
+    <div class="graph-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <label for="n-servers">Number of Servers (n): </label>
+        <input type="number" id="n-servers" value="10" min="1" max="50">
+        <label for="m-attackers">Number of Attackers (m): </label>
+        <input type="number" id="m-attackers" value="5" min="1" max="50">
+        <label for="lambda">Lambda (Rate of Attacks): </label>
+        <input type="number" id="lambda" step="0.1" value="0.5" min="0" max="10">
+        <label for="n-subintervals">n (Number of Subintervals): </label>
+        <input type="number" id="n-subintervals" value="100" min="1">
+        <button onclick="newSimulation()">New Simulation</button>
+    </div>    
+
+    <div id="histogram" class="histogram"></div>
+    <div id="relative-freq" class="relative-freq"></div>
+    
+    <div class="clearfix"></div>
+
+    <p id="avgResult"></p>
+    <p id="varianceResult"></p>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let n_servers, m_attackers, lambda, n_subintervals;
+        let currentStep = 0;
+        let attackerResults = [];
+        let attackerPositions = [];
+        let relativeFreqTrajectory = [];
+        let colors = [];
+        let dt;
+
+        let runningAvg = 0;
+        let runningVariance = 0;
+
+        function newSimulation() {
+            n_servers = parseInt(document.getElementById('n-servers').value);
+            m_attackers = parseInt(document.getElementById('m-attackers').value);
+            lambda = parseFloat(document.getElementById('lambda').value);
+            n_subintervals = parseInt(document.getElementById('n-subintervals').value);
+            dt = 1 / n_subintervals;
+        
+            // Dynamically resize the canvas based on number of servers and attackers
+            canvas.width = Math.floor(document.querySelector('.graph-container').clientWidth * 0.9); // 90% of the container's width
+            canvas.height = Math.max(800, m_attackers * 50);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+            drawGrid(n_servers, m_attackers);
+        
+            currentStep = 0;
+            attackerResults = Array(m_attackers).fill(0);
+            attackerPositions = Array(m_attackers).fill(canvas.height / 2);
+            relativeFreqTrajectory = Array(n_servers + 1).fill(0);
+            colors = [];
+        
+            runningAvg = 0;
+            runningVariance = 0;
+        
+            for (let i = 0; i < m_attackers; i++) {
+                colors.push(getRandomColor());
+            }
+        
+            updateDisplay();
+        
+            // Automatically execute nextStep at regular intervals
+            setInterval(nextStep, 500);  // Adjust the time interval (100ms) to control speed
+        }
+        
+
+        function nextStep() {
+            const serverWidth = canvas.width / n_servers; // One server per step
+            const attackerHeight = canvas.height / (2 * m_attackers); // Spread attackers vertically
+        
+            // Check if we have reached the maximum number of steps
+            if (currentStep >= n_servers) {
+                return;  // Stop the simulation when we reach the desired number of steps
+            }
+        
+            // Draw attackers on the grid
+            for (let i = 0; i < m_attackers; i++) {
+                let x = currentStep * serverWidth;
+                let y = attackerPositions[i];
+        
+                let nextX = (currentStep + 1) * serverWidth;
+                let nextY = y;
+        
+                // Random walk: +1 on penetration, -1 otherwise, applied once for the whole step
+                if (Math.random() < lambda) { 
+                    attackerResults[i] += 1;
+                    nextY -= attackerHeight;  // Move upwards (successful penetration)
+                } else {
+                    attackerResults[i] = Math.max(attackerResults[i] - 1, -m_attackers);  // No value below -m_attackers
+                    nextY += attackerHeight;  // Move downwards (failed attack)
+                }
+        
+                // Draw the line for this attacker's current position
+                drawLine(x, y, nextX, nextY, colors[i]);
+                attackerPositions[i] = nextY; // Update the attacker's new position
+            }
+        
+            currentStep++; // Move to the next server/time step
+            updateDisplay(); // Update the display with new results
+        }
+        
+
+
+        function drawGrid(n_servers, m_attackers) {
+            const serverWidth = canvas.width / n_servers; // Each server step corresponds to a grid line
+            const attackerHeight = canvas.height / (2 * m_attackers); // Spread attackers over the grid
+        
+            ctx.strokeStyle = '#cccccc';
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#cccccc';
+        
+            // Draw vertical grid lines (one per server step)
+            for (let i = 0; i <= n_servers; i++) {
+                const xPos = i * serverWidth;
+                ctx.beginPath();
+                ctx.moveTo(xPos, 0);
+                ctx.lineTo(xPos, canvas.height);
+                ctx.stroke();
+                ctx.fillText(i, xPos + 5, canvas.height - 10);
+            }
+        
+            // Draw horizontal grid lines (one per attacker position)
+            for (let i = -m_attackers; i <= m_attackers; i++) {
+                const yPos = canvas.height / 2 - i * attackerHeight;
+                ctx.beginPath();
+                ctx.moveTo(0, yPos);
+                ctx.lineTo(canvas.width, yPos);
+                ctx.stroke();
+                ctx.fillText(i, 5, yPos - 5);
+            }
+        }
+        
+
+        function drawLine(x1, y1, x2, y2, color) {
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        function updateDisplay() {
+            createHistogram(attackerResults);
+            updateRelativeFreq(attackerResults);
+
+            const { avg, variance } = calculateMeanVariance(attackerResults);
+            document.getElementById('avgResult').textContent = `Average: ${avg.toFixed(2)}`;
+            document.getElementById('varianceResult').textContent = `Variance: ${variance.toFixed(2)}`;
+        }
+
+        function createHistogram(data) {
+            const histogramDiv = document.getElementById('histogram');
+            histogramDiv.innerHTML = ''; 
+
+            data.forEach((level, id) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Attacker ${id}:`;
+
+                const barFillPos = document.createElement('div');
+                barFillPos.className = 'bar-fill';
+                barFillPos.style.width = `${Math.max(0, level) * 30}px`;
+                barFillPos.style.backgroundColor = colors[id];
+                barFillPos.innerText = level >= 0 ? level : 0;
+
+                const barFillNeg = document.createElement('div');
+                barFillNeg.className = 'bar-fill';
+                barFillNeg.style.width = `${Math.abs(Math.min(0, level)) * 30}px`;
+                barFillNeg.style.backgroundColor = '#ff4d4d';
+                barFillNeg.innerText = level < 0 ? Math.abs(level) : '';
+
+                bar.appendChild(barText);
+                bar.appendChild(barFillNeg);
+                bar.appendChild(barFillPos);
+
+                histogramDiv.appendChild(bar);
+            });
+        }
+
+        function updateRelativeFreq(data) {
+            const relativeFreqDiv = document.getElementById('relative-freq');
+            relativeFreqDiv.innerHTML = ''; 
+
+            const freqData = Array(n_servers + 1).fill(0);
+            data.forEach(value => {
+                freqData[Math.min(n_servers, Math.max(0, value))]++;
+            });
+
+            freqData.forEach((freq, level) => {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+
+                const barText = document.createElement('div');
+                barText.className = 'bar-text';
+                barText.innerText = `Level ${level}:`;
+
+                const barFill = document.createElement('div');
+                barFill.className = 'bar-fill';
+                barFill.style.width = `${freq * 30}px`;
+                barFill.style.backgroundColor = '#f4a742';
+                barFill.innerText = freq;
+
+                bar.appendChild(barText);
+                bar.appendChild(barFill);
+                relativeFreqDiv.appendChild(bar);
+            });
+        }
+
+        function calculateMeanVariance(data) {
+            let sum = 0;
+            let sumSquared = 0;
+            data.forEach(value => {
+                sum += value;
+                sumSquared += value * value;
+            });
+
+            const avg = sum / data.length;
+            const variance = sumSquared / data.length - avg * avg;
+            return { avg, variance };
+        }
+
+        // Optionally, make sure to resize the canvas properly when the window resizes
+        window.addEventListener('resize', function () {
+            const canvas = document.getElementById('graphCanvas');
+            canvas.width = canvas.clientWidth; // Match canvas to the container's width
+            canvas.height = canvas.clientHeight;
+            drawGraph(); // Redraw the graph with new dimensions if needed
+        });
+
+    </script>
+</body>
+</html>
