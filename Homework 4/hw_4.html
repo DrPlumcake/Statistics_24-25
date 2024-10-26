@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wiener Process Simulation</title>
+    <style>
+        body {
+            background-color: #212121;
+            color: #fff;
+        }
+        .graph-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #canvas {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #fff;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .controls label, .controls input {
+            margin: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h3>Wiener Process Approximation with Random Walk</h3>
+
+    <div class="graph-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <label for="lambda">Lambda (Rate of Attacks): </label>
+        <input type="number" id="lambda" step="0.1" value="0.5" min="0" max="10">
+        <label for="n-subintervals">n (Number of Subintervals): </label>
+        <input type="number" id="n-subintervals" value="500" min="10" max="10000">
+        <button onclick="startSimulation()">Start Simulation</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let lambda, n_subintervals, dt;
+        let wienerProcessValues = [];  // Array to store the Wiener process values
+
+        function startSimulation() {
+            lambda = parseFloat(document.getElementById('lambda').value);
+            n_subintervals = parseInt(document.getElementById('n-subintervals').value);
+            dt = 1 / n_subintervals;
+
+            canvas.width = document.querySelector('.graph-container').clientWidth * 0.9;
+            canvas.height = 400;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            wienerProcessValues = [];
+
+            simulateWienerProcess();
+            plotWienerProcess();
+        }
+
+        function simulateWienerProcess() {
+            let currentPosition = 0;  // Start at zero for Wiener process
+            wienerProcessValues.push(currentPosition);
+
+            for (let i = 1; i <= n_subintervals; i++) {
+                // Calculate step size ±sqrt(dt)
+                let step = (Math.random() < 0.5 ? 1 : -1) * Math.sqrt(dt);
+                currentPosition += step;
+                wienerProcessValues.push(currentPosition);
+            }
+        }
+
+        function plotWienerProcess() {
+            const timeStepWidth = canvas.width / n_subintervals;
+            const centerY = canvas.height / 2;
+            const scale = canvas.height / 4; // Adjust scale for visualization
+
+            ctx.strokeStyle = '#f4a742';
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+
+            for (let i = 1; i < wienerProcessValues.length; i++) {
+                const x = i * timeStepWidth;
+                const y = centerY - wienerProcessValues[i] * scale;
+                ctx.lineTo(x, y);
+            }
+
+            ctx.stroke();
+
+            // Displaying average and variance at the end
+            const avg = calculateAverage(wienerProcessValues);
+            const variance = calculateVariance(wienerProcessValues, avg);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.fillText(`Average: ${avg.toFixed(4)}`, 10, 20);
+            ctx.fillText(`Variance: ${variance.toFixed(4)}`, 10, 40);
+        }
+
+        function calculateAverage(data) {
+            return data.reduce((acc, value) => acc + value, 0) / data.length;
+        }
+
+        function calculateVariance(data, avg) {
+            return data.reduce((acc, value) => acc + Math.pow(value - avg, 2), 0) / data.length;
+        }
+    </script>
+</body>
+</html>
