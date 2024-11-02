@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stochastic SDE Simulator</title>
+    <style>
+        body {
+            background-color: #212121;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .graph-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+        }
+        #canvas {
+            border: 1px solid #fff;
+            width: 90%;
+            height: 400px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .controls label, .controls input, .controls select, .controls button {
+            margin: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h3>Stochastic Differential Equation Simulation</h3>
+
+    <div class="graph-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <label for="sde-type">SDE Type: </label>
+        <select id="sde-type">
+            <option value="wiener">Wiener Process (Brownian Motion)</option>
+            <option value="ornstein">Ornstein-Uhlenbeck Process</option>
+            <option value="geometric">Geometric Brownian Motion</option>
+        </select>
+        
+        <label for="drift">Drift (μ): </label>
+        <input type="number" id="drift" step="0.1" value="0.0">
+
+        <label for="diffusion">Diffusion (σ): </label>
+        <input type="number" id="diffusion" step="0.1" value="1.0">
+
+        <label for="steps">Steps: </label>
+        <input type="number" id="steps" value="500" min="10" max="10000">
+
+        <button onclick="startSimulation()">Start Simulation</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Core Simulation class
+        class Simulation {
+            constructor(timeWindow, steps, driftFunc, diffusionFunc, initialValue = 0) {
+                this.timeWindow = timeWindow;
+                this.steps = steps;
+                this.dt = timeWindow / steps;
+                this.driftFunc = driftFunc;
+                this.diffusionFunc = diffusionFunc;
+                this.initialValue = initialValue;
+                this.processValues = [];
+            }
+
+            // Euler-Maruyama method
+            simulate() {
+                this.processValues = [this.initialValue];
+                let currentValue = this.initialValue;
+
+                for (let i = 1; i <= this.steps; i++) {
+                    const t = i * this.dt;
+                    const drift = this.driftFunc(currentValue, t) * this.dt;
+                    const diffusion = this.diffusionFunc(currentValue, t) * Math.sqrt(this.dt) * this.randomNormal();
+                    currentValue += drift + diffusion;
+                    this.processValues.push(currentValue);
+                }
+            }
+
+            // Box-Muller transform to generate standard normal random numbers
+            randomNormal() {
+                let u = Math.random();
+                let v = Math.random();
+                return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+            }
+        }
+
+        // Define SDEs with different drift and diffusion functions
+        const SDEs = {
+            wiener: {
+                drift: () => 0,
+                diffusion: () => 1
+            },
+            ornstein: {
+                drift: (x) => -0.5 * x,
+                diffusion: () => 0.5
+            },
+            geometric: {
+                drift: (x) => 0.05 * x,
+                diffusion: (x) => 0.2 * x
+            }
+        };
+
+        // Main function to start the simulation
+        function startSimulation() {
+            const sdeType = document.getElementById('sde-type').value;
+            const driftValue = parseFloat(document.getElementById('drift').value);
+            const diffusionValue = parseFloat(document.getElementById('diffusion').value);
+            const steps = parseInt(document.getElementById('steps').value);
+            const timeWindow = 1;
+
+            const driftFunc = (x, t) => driftValue + SDEs[sdeType].drift(x, t);
+            const diffusionFunc = (x, t) => diffusionValue * SDEs[sdeType].diffusion(x, t);
+
+            const sim = new Simulation(timeWindow, steps, driftFunc, diffusionFunc);
+            sim.simulate();
+            plotProcess(sim.processValues);
+        }
+
+        // Plot the simulated process on canvas
+        function plotProcess(values) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const timeStepWidth = canvas.width / values.length;
+            const centerY = canvas.height / 2;
+            const scale = canvas.height / 4; // Adjust for visualization
+
+            ctx.strokeStyle = '#f4a742';
+            ctx.beginPath();
+            ctx.moveTo(0, centerY - values[0] * scale);
+
+            for (let i = 1; i < values.length; i++) {
+                const x = i * timeStepWidth;
+                const y = centerY - values[i] * scale;
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Calculate and display average and variance
+            const avg = calculateAverage(values);
+            const variance = calculateVariance(values, avg);
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px Arial';
+            ctx.fillText(`Average: ${avg.toFixed(4)}`, 10, 20);
+            ctx.fillText(`Variance: ${variance.toFixed(4)}`, 10, 40);
+        }
+
+        // Utility functions for statistics
+        function calculateAverage(data) {
+            return data.reduce((acc, value) => acc + value, 0) / data.length;
+        }
+
+        function calculateVariance(data, avg) {
+            return data.reduce((acc, value) => acc + Math.pow(value - avg, 2), 0) / data.length;
+        }
+    </script>
+</body>
+</html>
