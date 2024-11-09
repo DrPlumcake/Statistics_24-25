@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discrete Distribution Simulation with Interaction</title>
+    <style>
+        body {
+            background-color: #212121;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        canvas {
+            border: 1px solid #333;
+            margin-top: 20px;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #controls button {
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Discrete Distribution Simulation with Interaction</h1>
+
+    <div id="controls">
+        <label for="sampleSize">Samples per Step:</label>
+        <input type="number" id="sampleSize" value="100" min="1" max="1000">
+        
+        <label for="updateInterval">Update Interval (ms):</label>
+        <input type="number" id="updateInterval" value="100" min="10" max="1000">
+        
+        <button onclick="startSimulation()">Start Simulation</button>
+        <button onclick="pauseSimulation()">Pause</button>
+        <button onclick="resetSimulation()">Reset</button>
+    </div>
+
+    <canvas id="distributionCanvas" width="500" height="300"></canvas>
+    <canvas id="convergenceCanvas" width="500" height="300"></canvas>
+
+    <p>Theoretical Mean: <span id="theoreticalMean"></span>, Theoretical Variance: <span id="theoreticalVariance"></span></p>
+    <p>Empirical Mean: <span id="empiricalMean">0</span>, Empirical Variance: <span id="empiricalVariance">0</span></p>
+
+    <script>
+        // Set up the distribution values and probabilities
+        const values = [1, 2, 3, 4];
+        const probabilities = [0.1, 0.2, 0.4, 0.3];
+        
+        // Calculate theoretical mean and variance
+        let theoreticalMean = 0;
+        let theoreticalVariance = 0;
+        for (let i = 0; i < values.length; i++) {
+            theoreticalMean += values[i] * probabilities[i];
+        }
+        for (let i = 0; i < values.length; i++) {
+            theoreticalVariance += probabilities[i] * Math.pow(values[i] - theoreticalMean, 2);
+        }
+        document.getElementById("theoreticalMean").textContent = theoreticalMean.toFixed(2);
+        document.getElementById("theoreticalVariance").textContent = theoreticalVariance.toFixed(2);
+
+        // Initialize canvas
+        const distributionCanvas = document.getElementById('distributionCanvas');
+        const convergenceCanvas = document.getElementById('convergenceCanvas');
+        const distributionCtx = distributionCanvas.getContext('2d');
+        const convergenceCtx = convergenceCanvas.getContext('2d');
+
+        // Variables to hold empirical data
+        let sampleCount = 0;
+        let empiricalFrequency = Array(values.length).fill(0);
+        let empiricalMean = 0;
+        let empiricalVariance = 0;
+        let M2 = 0; // for Welford's variance calculation
+
+        // Generate a sample from the discrete distribution
+        function generateSample() {
+            const random = Math.random();
+            let cumulativeProbability = 0;
+            for (let i = 0; i < probabilities.length; i++) {
+                cumulativeProbability += probabilities[i];
+                if (random < cumulativeProbability) return values[i];
+            }
+            return values[values.length - 1]; // fallback in case of floating point precision issues
+        }
+
+        // Update mean and variance with Welford's algorithm
+        function updateStatistics(newSample) {
+            sampleCount++;
+            const delta = newSample - empiricalMean;
+            empiricalMean += delta / sampleCount;
+            M2 += delta * (newSample - empiricalMean);
+            empiricalVariance = M2 / sampleCount;
+        }
+
+        // Update empirical frequency distribution
+        function updateEmpiricalDistribution(sample) {
+            const index = values.indexOf(sample);
+            if (index !== -1) empiricalFrequency[index]++;
+        }
+
+        // Draw the distribution comparison
+        function drawDistribution() {
+            distributionCtx.clearRect(0, 0, distributionCanvas.width, distributionCanvas.height);
+
+            // Draw theoretical distribution
+            distributionCtx.fillStyle = 'blue';
+            const barWidth = distributionCanvas.width / (2 * values.length);
+            for (let i = 0; i < values.length; i++) {
+                const height = probabilities[i] * distributionCanvas.height;
+                distributionCtx.fillRect(i * 2 * barWidth, distributionCanvas.height - height, barWidth, height);
+            }
+
+            // Draw empirical distribution
+            distributionCtx.fillStyle = 'red';
+            const totalSamples = sampleCount;
+            for (let i = 0; i < values.length; i++) {
+                const height = (empiricalFrequency[i] / totalSamples) * distributionCanvas.height;
+                distributionCtx.fillRect(i * 2 * barWidth + barWidth, distributionCanvas.height - height, barWidth, height);
+            }
+        }
+
+        // Draw convergence graph for mean and variance
+        function drawConvergence() {
+            convergenceCtx.clearRect(0, 0, convergenceCanvas.width, convergenceCanvas.height);
+
+            // Draw theoretical lines
+            convergenceCtx.strokeStyle = 'blue';
+            convergenceCtx.beginPath();
+            convergenceCtx.moveTo(0, convergenceCanvas.height - theoreticalMean / 10 * convergenceCanvas.height);
+            convergenceCtx.lineTo(convergenceCanvas.width, convergenceCanvas.height - theoreticalMean / 10 * convergenceCanvas.height);
+            convergenceCtx.moveTo(0, convergenceCanvas.height - theoreticalVariance / 10 * convergenceCanvas.height);
+            convergenceCtx.lineTo(convergenceCanvas.width, convergenceCanvas.height - theoreticalVariance / 10 * convergenceCanvas.height);
+            convergenceCtx.stroke();
+
+            // Plot empirical points
+            convergenceCtx.fillStyle = 'red';
+            const x = (sampleCount / 1000) * convergenceCanvas.width;
+            convergenceCtx.fillRect(x, convergenceCanvas.height - (empiricalMean / 10) * convergenceCanvas.height, 2, 2);
+            convergenceCtx.fillRect(x, convergenceCanvas.height - (empiricalVariance / 10) * convergenceCanvas.height, 2, 2);
+        }
+
+        // Main simulation function
+        function simulateStep() {
+            const samplesPerStep = parseInt(document.getElementById("sampleSize").value, 10);
+            for (let i = 0; i < samplesPerStep; i++) {
+                const sample = generateSample();
+                updateEmpiricalDistribution(sample);
+                updateStatistics(sample);
+            }
+            drawDistribution();
+            drawConvergence();
+            document.getElementById("empiricalMean").textContent = empiricalMean.toFixed(2);
+            document.getElementById("empiricalVariance").textContent = empiricalVariance.toFixed(2);
+        }
+
+        // Start simulation
+        let interval;
+        function startSimulation() {
+            const updateInterval = parseInt(document.getElementById("updateInterval").value, 10);
+            if (interval) clearInterval(interval);
+            interval = setInterval(simulateStep, updateInterval);
+        }
+
+        // Pause simulation
+        function pauseSimulation() {
+            clearInterval(interval);
+        }
+
+        // Reset simulation
+        function resetSimulation() {
+            clearInterval(interval);
+            sampleCount = 0;
+            empiricalFrequency = Array(values.length).fill(0);
+            empiricalMean = 0;
+            empiricalVariance = 0;
+            M2 = 0;
+            drawDistribution();
+            drawConvergence();
+            document.getElementById("empiricalMean").textContent = "0";
+            document.getElementById("empiricalVariance").textContent = "0";
+        }
+    </script>
+</body>
+</html>
