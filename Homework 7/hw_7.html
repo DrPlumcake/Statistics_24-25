@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sampling Distribution of Averages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: #fff;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            padding: 20px;
+        }
+        .graph-container {
+            margin-top: 20px;
+        }
+        .text-stats {
+            margin: 20px auto;
+            width: 80%;
+            text-align: left;
+            font-size: 16px;
+            line-height: 1.8;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 10px;
+        }
+        canvas {
+            border: 1px solid #555;
+            margin-top: 20px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            border: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sampling Distribution of Averages</h1>
+        <div class="text-stats" id="stats">
+            <!-- Statistics will be dynamically updated here -->
+        </div>
+        <div class="graph-container">
+            <canvas id="canvas" width="1200" height="500"></canvas>
+        </div>
+        <div class="controls">
+            <label for="sampleSize">Sample Size (n):</label>
+            <input type="number" id="sampleSize" value="30" min="1">
+            <label for="numSamples">Number of Samples (m):</label>
+            <input type="number" id="numSamples" value="1000" min="1">
+            <button onclick="startSimulation()">Start Simulation</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let samplingAverages = [];
+
+        function generateSamples(sampleSize, numSamples) {
+            const parentDistribution = [1, 2, 3, 4, 5];
+            const probabilities = [0.1, 0.2, 0.3, 0.2, 0.2];
+            const samples = [];
+            for (let i = 0; i < numSamples; i++) {
+                const sample = [];
+                for (let j = 0; j < sampleSize; j++) {
+                    const random = Math.random();
+                    let cumulative = 0;
+                    for (let k = 0; k < parentDistribution.length; k++) {
+                        cumulative += probabilities[k];
+                        if (random < cumulative) {
+                            sample.push(parentDistribution[k]);
+                            break;
+                        }
+                    }
+                }
+                samples.push(sample);
+            }
+            return samples;
+        }
+
+        function calculateAverages(samples) {
+            return samples.map(sample => sample.reduce((a, b) => a + b, 0) / sample.length);
+        }
+
+        function displayStatistics(empiricalMean, empiricalVariance, theoreticalSamplingVariance, theoreticalMean) {
+            const stats = document.getElementById('stats');
+            stats.innerHTML = `
+                <b>Empirical Mean:</b> ${empiricalMean.toFixed(4)}<br>
+                <b>Empirical Variance:</b> ${empiricalVariance.toFixed(4)}<br>
+                <b>Theoretical Sampling Variance:</b> ${theoreticalSamplingVariance.toFixed(4)}<br>
+                <b>Theoretical Mean:</b> ${theoreticalMean.toFixed(4)}
+            `;
+        }
+
+        function plotSamplingAverages() {
+            const bins = 30;
+            const minVal = Math.min(...samplingAverages);
+            const maxVal = Math.max(...samplingAverages);
+            const binWidth = (maxVal - minVal) / bins;
+            const histogram = new Array(bins).fill(0);
+
+            samplingAverages.forEach(avg => {
+                const binIndex = Math.floor((avg - minVal) / binWidth);
+                histogram[Math.min(binIndex, bins - 1)]++;
+            });
+
+            const maxCount = Math.max(...histogram);
+            const barWidth = canvas.width / bins;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear previous content
+            histogram.forEach((count, i) => {
+                const barHeight = (count / maxCount) * canvas.height;
+                ctx.fillStyle = '#4CAF50';
+                ctx.fillRect(i * barWidth, canvas.height - barHeight, barWidth - 1, barHeight);
+            });
+        }
+
+        function startSimulation() {
+            const sampleSize = parseInt(document.getElementById('sampleSize').value);
+            const numSamples = parseInt(document.getElementById('numSamples').value);
+
+            const samples = generateSamples(sampleSize, numSamples);
+            samplingAverages = calculateAverages(samples);
+
+            const empiricalMean = samplingAverages.reduce((a, b) => a + b, 0) / samplingAverages.length;
+            const empiricalVariance = samplingAverages
+                .map(avg => (avg - empiricalMean) ** 2)
+                .reduce((a, b) => a + b, 0) / samplingAverages.length;
+
+            const parentMean = 3; // For the parent distribution [1,2,3,4,5] with given probabilities
+            const parentVariance = 2; // Pre-computed for this distribution
+            const theoreticalSamplingVariance = parentVariance / sampleSize;
+
+            displayStatistics(empiricalMean, empiricalVariance, theoreticalSamplingVariance, parentMean);
+            plotSamplingAverages();
+        }
+    </script>
+</body>
+</html>
